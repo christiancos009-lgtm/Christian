@@ -3,25 +3,26 @@ require("dotenv").config();
 const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 const commands = [
+
+  // 📩 DM
   new SlashCommandBuilder()
     .setName("dm")
     .setDescription("Invia un DM a un utente")
-    
     .addUserOption(option =>
-      option
-        .setName("utente")
-        .setDescription("Utente a cui inviare il DM")
+      option.setName("utente")
+        .setDescription("Utente")
         .setRequired(true)
     )
-
     .addStringOption(option =>
-      option
-        .setName("messaggio")
-        .setDescription("Messaggio da inviare")
+      option.setName("messaggio")
+        .setDescription("Messaggio")
         .setRequired(true)
-    )
+    ),
 
-    .toJSON()
+  // 📊 ACTIVITY (user)
+  new SlashCommandBuilder()
+    .setName("activity")
+    .setDescription("Mostra la tua attività settimanale")
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -29,20 +30,19 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
   try {
 
-    console.log("🔄 Registrazione comando /dm...");
+    console.log("🔄 Registrazione comandi...");
 
     await rest.put(
       Routes.applicationGuildCommands(
-  process.env.CLIENT_ID,
-  process.env.GUILD_ID
-),
-      { body: commands }
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands.map(c => c.toJSON()) }
     );
 
-    console.log("✅ Comando /dm registrato!");
+    console.log("✅ Comandi aggiornati!");
 
   } catch (err) {
-    console.error("❌ Errore:");
     console.error(err);
   }
 })();
