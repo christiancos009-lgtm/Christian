@@ -1,14 +1,9 @@
 require("dotenv").config();
-const {
-  Client,
-  GatewayIntentBits
-} = require("discord.js");
-
+const { Client, GatewayIntentBits } = require("discord.js");
 const fs = require("fs");
 
 // ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const REPORT_CHANNEL_ID = "1509983822236614869";
@@ -28,13 +23,11 @@ const OWNER_IDS = [
 
 const WEEKLY_GOAL = 60;
 
-// ================= JSON DATABASE =================
+// ================= DB =================
 const DB_FILE = "./activity.json";
 
 function loadDB() {
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({}));
-  }
+  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
   return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
@@ -42,9 +35,8 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// ================= VOICE SESSIONS =================
+// ================= VOICE =================
 const voiceSessions = new Map();
-
 let lastReport = 0;
 
 // ================= CLIENT =================
@@ -56,19 +48,16 @@ const client = new Client({
   ]
 });
 
-// ================= READY =================
 client.once("ready", () => {
   console.log(`Bot online come ${client.user.tag}`);
 });
 
 // ================= ROLE CHECK =================
 function hasAllowedRole(member) {
-  return member.roles.cache.some(r =>
-    ALLOWED_ROLES.includes(r.id)
-  );
+  return member.roles.cache.some(r => ALLOWED_ROLES.includes(r.id));
 }
 
-// ================= VOICE TRACKING =================
+// ================= VOICE TRACK =================
 client.on("voiceStateUpdate", (oldState, newState) => {
 
   const member = newState.member || oldState.member;
@@ -93,7 +82,6 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     const minutes = Math.floor((Date.now() - start) / 60000);
 
     db[userId] += minutes;
-
     saveDB(db);
 
     voiceSessions.delete(userId);
@@ -105,43 +93,40 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
-  // ---------------- /activity ----------------
- if (interaction.commandName === "activity") {
+  // ================= /activity =================
+  if (interaction.commandName === "activity") {
 
-  const member = interaction.member;
+    const member = interaction.member;
 
-  // 🔒 SOLO MAIN / TALENT / ACADEMY
-  const allowed = member.roles.cache.some(r =>
-    ALLOWED_ROLES.includes(r.id)
-  );
+    const allowed = member.roles.cache.some(r =>
+      ALLOWED_ROLES.includes(r.id)
+    );
 
-  if (!allowed) {
+    if (!allowed) {
+      return interaction.reply({
+        content: "❌ Non autorizzato (solo MAIN / TALENT / ACADEMY)",
+        ephemeral: true
+      });
+    }
+
+    const db = loadDB();
+
+    const minutes = db[interaction.user.id] || 0;
+    const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
+    const completed = minutes >= WEEKLY_GOAL;
+
     return interaction.reply({
-      content: "❌ Non autorizzato (solo MAIN / TALENT / ACADEMY)",
-      ephemeral: true
-    });
-  }
-
-  const db = loadDB();
-
-  const minutes = db[interaction.user.id] || 0;
-  const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
-  const completed = minutes >= WEEKLY_GOAL;
-
-  return interaction.reply({
-    content:
+      content:
 `📊 ATTIVITÀ SETTIMANALE
 
 🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
 
-${completed
-  ? "✅ Obiettivo completato"
-  : `⏳ Mancano ${remaining} minuti`
-}`,
-    ephemeral: true
-  });
-}
-  // ---------------- /dm ----------------
+${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`,
+      ephemeral: true
+    });
+  }
+
+  // ================= /dm =================
   if (interaction.commandName === "dm") {
 
     if (!OWNER_IDS.includes(interaction.user.id)) {
@@ -162,8 +147,7 @@ ${completed
         ephemeral: true
       });
 
-    } catch (err) {
-
+    } catch {
       return interaction.reply({
         content: "❌ Impossibile inviare DM",
         ephemeral: true
@@ -196,7 +180,6 @@ async function sendReport(guild) {
   }
 
   await channel.send(msg);
-
   saveDB({});
 }
 
@@ -210,17 +193,14 @@ setInterval(() => {
     now.getHours() === 0 &&
     now.getMinutes() === 0;
 
-  const nowTime = Date.now();
+  if (isMondayMidnight && Date.now() - lastReport > 60000) {
 
-  if (isMondayMidnight && nowTime - lastReport > 60000) {
-
-    lastReport = nowTime;
+    lastReport = Date.now();
 
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
     sendReport(guild);
-
     console.log("📊 Report inviato + reset completato");
   }
 

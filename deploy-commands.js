@@ -7,16 +7,14 @@ const commands = [
   new SlashCommandBuilder()
     .setName("dm")
     .setDescription("Invia un DM a un utente")
-    .addUserOption(option =>
-      option
-        .setName("utente")
-        .setDescription("Utente a cui inviare il messaggio")
+    .addUserOption(o =>
+      o.setName("utente")
+        .setDescription("Utente target")
         .setRequired(true)
     )
-    .addStringOption(option =>
-      option
-        .setName("messaggio")
-        .setDescription("Testo del messaggio")
+    .addStringOption(o =>
+      o.setName("messaggio")
+        .setDescription("Testo messaggio")
         .setRequired(true)
     ),
 
