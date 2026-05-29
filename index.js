@@ -37,10 +37,6 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// ================= VOICE =================
-const voiceSessions = new Map();
-let lastReport = 0;
-
 // ================= CLIENT =================
 const client = new Client({
   intents: [
@@ -50,16 +46,21 @@ const client = new Client({
   ]
 });
 
+// ================= READY =================
 client.once("ready", () => {
   console.log(`Bot online come ${client.user.tag}`);
 });
 
 // ================= ROLE CHECK =================
 function hasAllowedRole(member) {
-  return member.roles.cache.some(r => ALLOWED_ROLES.includes(r.id));
+  return member.roles.cache.some(r =>
+    ALLOWED_ROLES.includes(r.id)
+  );
 }
 
-// ================= VOICE TRACK =================
+// ================= VOICE ENTER TRACK =================
+const voiceSessions = new Map();
+
 client.on("voiceStateUpdate", (oldState, newState) => {
 
   const member = newState.member || oldState.member;
@@ -68,14 +69,13 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   if (!hasAllowedRole(member)) return;
 
   const userId = member.id;
-  const db = loadDB();
 
-  if (!db[userId]) db[userId] = 0;
-
+  // entra in vocale
   if (!oldState.channelId && newState.channelId) {
     voiceSessions.set(userId, Date.now());
   }
 
+  // esce dalla vocale (backup)
   if (oldState.channelId && !newState.channelId) {
 
     const start = voiceSessions.get(userId);
@@ -83,24 +83,49 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
     const minutes = Math.floor((Date.now() - start) / 60000);
 
-    db[userId] += minutes;
+    const db = loadDB();
+    db[userId] = (db[userId] || 0) + minutes;
     saveDB(db);
 
     voiceSessions.delete(userId);
   }
 });
 
+// ================= 🔥 MAIN FIX: TIMER OGNI 60 SECONDI =================
+setInterval(async () => {
+
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return;
+
+  await guild.members.fetch();
+
+  const db = loadDB();
+
+  for (const member of guild.members.cache.values()) {
+
+    if (!member.voice.channel) continue;
+    if (!hasAllowedRole(member)) continue;
+
+    const userId = member.id;
+
+    db[userId] = (db[userId] || 0) + 1; // +1 minuto ogni tick
+  }
+
+  saveDB(db);
+
+}, 60 * 1000);
+
 // ================= COMMANDS =================
 client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
-  // ================= /activity =================
+  // /activity
   if (interaction.commandName === "activity") {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id);
+    const member = interaction.member;
 
     if (!hasAllowedRole(member)) {
       return interaction.editReply("❌ Non autorizzato (solo ASE roles)");
@@ -110,18 +135,17 @@ client.on("interactionCreate", async (interaction) => {
 
     const minutes = db[interaction.user.id] || 0;
     const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
-    const completed = minutes >= WEEKLY_GOAL;
 
     return interaction.editReply(
 `📊 ATTIVITÀ SETTIMANALE
 
 🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
 
-${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`
+⏳ Mancano ${remaining} minuti`
     );
   }
 
-  // ================= /dm =================
+  // /dm
   if (interaction.commandName === "dm") {
 
     if (!OWNER_IDS.includes(interaction.user.id)) {
@@ -164,11 +188,12 @@ async function sendReport(guild) {
 
   await channel.send(msg);
 
-  // reset settimanale
   saveDB({});
 }
 
 // ================= LUNEDÌ 00:00 =================
+let lastReport = 0;
+
 setInterval(() => {
 
   const now = new Date();
@@ -179,7 +204,6 @@ setInterval(() => {
     now.getMinutes() === 0;
 
   if (!isMondayMidnight) return;
-
   if (Date.now() - lastReport < 60000) return;
 
   lastReport = Date.now();
@@ -188,7 +212,7 @@ setInterval(() => {
   if (!guild) return;
 
   sendReport(guild);
-  console.log("📊 Report automatico inviato (lunedì 00:00)");
+  console.log("📊 Report automatico inviato");
 
 }, 60000);
 
