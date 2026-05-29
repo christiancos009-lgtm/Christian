@@ -19,6 +19,13 @@ const ALLOWED_ROLES = [
   "1438255779558981673"
 ];
 
+const OWNER_IDS = [
+  "616719017234792450",
+  "1092045280305762304",
+  "1283221877535412356",
+  "1129400258913370112"
+];
+
 const WEEKLY_GOAL = 60;
 
 // ================= JSON DATABASE =================
@@ -38,7 +45,6 @@ function saveDB(data) {
 // ================= VOICE SESSIONS =================
 const voiceSessions = new Map();
 
-// anti doppio report
 let lastReport = 0;
 
 // ================= CLIENT =================
@@ -75,12 +81,10 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
   if (!db[userId]) db[userId] = 0;
 
-  // entra in vocale
   if (!oldState.channelId && newState.channelId) {
     voiceSessions.set(userId, Date.now());
   }
 
-  // esce dalla vocale
   if (oldState.channelId && !newState.channelId) {
 
     const start = voiceSessions.get(userId);
@@ -96,11 +100,12 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   }
 });
 
-// ================= /activity =================
+// ================= COMMANDS =================
 client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
+  // ---------------- /activity ----------------
   if (interaction.commandName === "activity") {
 
     const db = loadDB();
@@ -109,7 +114,7 @@ client.on("interactionCreate", async (interaction) => {
     const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
     const completed = minutes >= WEEKLY_GOAL;
 
-    interaction.reply({
+    return interaction.reply({
       content:
 `📊 ATTIVITÀ SETTIMANALE
 
@@ -121,6 +126,36 @@ ${completed
 }`,
       ephemeral: true
     });
+  }
+
+  // ---------------- /dm ----------------
+  if (interaction.commandName === "dm") {
+
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
+    }
+
+    const user = interaction.options.getUser("utente");
+    const text = interaction.options.getString("messaggio");
+
+    try {
+      await user.send(text);
+
+      return interaction.reply({
+        content: "✅ DM inviato",
+        ephemeral: true
+      });
+
+    } catch (err) {
+
+      return interaction.reply({
+        content: "❌ Impossibile inviare DM",
+        ephemeral: true
+      });
+    }
   }
 });
 
@@ -149,11 +184,10 @@ async function sendReport(guild) {
 
   await channel.send(msg);
 
-  // reset settimana
   saveDB({});
 }
 
-// ================= RESET AUTOMATICO =================
+// ================= RESET WEEKLY =================
 setInterval(() => {
 
   const now = new Date();
