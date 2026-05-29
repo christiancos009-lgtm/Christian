@@ -106,16 +106,30 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   // ---------------- /activity ----------------
-  if (interaction.commandName === "activity") {
+ if (interaction.commandName === "activity") {
 
-    const db = loadDB();
+  const member = interaction.member;
 
-    const minutes = db[interaction.user.id] || 0;
-    const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
-    const completed = minutes >= WEEKLY_GOAL;
+  // 🔒 SOLO MAIN / TALENT / ACADEMY
+  const allowed = member.roles.cache.some(r =>
+    ALLOWED_ROLES.includes(r.id)
+  );
 
+  if (!allowed) {
     return interaction.reply({
-      content:
+      content: "❌ Non autorizzato (solo MAIN / TALENT / ACADEMY)",
+      ephemeral: true
+    });
+  }
+
+  const db = loadDB();
+
+  const minutes = db[interaction.user.id] || 0;
+  const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
+  const completed = minutes >= WEEKLY_GOAL;
+
+  return interaction.reply({
+    content:
 `📊 ATTIVITÀ SETTIMANALE
 
 🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
@@ -124,10 +138,9 @@ ${completed
   ? "✅ Obiettivo completato"
   : `⏳ Mancano ${remaining} minuti`
 }`,
-      ephemeral: true
-    });
-  }
-
+    ephemeral: true
+  });
+}
   // ---------------- /dm ----------------
   if (interaction.commandName === "dm") {
 
