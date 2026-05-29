@@ -4,10 +4,12 @@ const {
   GatewayIntentBits
 } = require("discord.js");
 
-const sqlite3 = require("sqlite3").verbose();
+const fs = require("fs");
 
 // ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const REPORT_CHANNEL_ID = "1509983822236614869";
 
@@ -19,16 +21,21 @@ const ALLOWED_ROLES = [
 
 const WEEKLY_GOAL = 60;
 
-// ================= DB =================
-const db = new sqlite3.Database("./activity.db");
+// ================= JSON DATABASE =================
+const DB_FILE = "./activity.json";
 
-db.run(`
-CREATE TABLE IF NOT EXISTS activity (
-  userId TEXT PRIMARY KEY,
-  voiceTime INTEGER DEFAULT 0
-)
-`);
+function loadDB() {
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({}));
+  }
+  return JSON.parse(fs.readFileSync(DB_FILE));
+}
 
+function saveDB(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
+
+// ================= VOICE SESSIONS =================
 const voiceSessions = new Map();
 
 // anti doppio report
@@ -57,19 +64,23 @@ function hasAllowedRole(member) {
 
 // ================= VOICE TRACKING =================
 client.on("voiceStateUpdate", (oldState, newState) => {
+
   const member = newState.member || oldState.member;
   if (!member) return;
 
   if (!hasAllowedRole(member)) return;
 
   const userId = member.id;
+  const db = loadDB();
+
+  if (!db[userId]) db[userId] = 0;
 
   // entra in vocale
   if (!oldState.channelId && newState.channelId) {
     voiceSessions.set(userId, Date.now());
   }
 
-  // esce da vocale
+  // esce dalla vocale
   if (oldState.channelId && !newState.channelId) {
 
     const start = voiceSessions.get(userId);
@@ -77,12 +88,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
     const minutes = Math.floor((Date.now() - start) / 60000);
 
-    db.run(`
-      INSERT INTO activity(userId, voiceTime)
-      VALUES (?, ?)
-      ON CONFLICT(userId)
-      DO UPDATE SET voiceTime = voiceTime + ?
-    `, [userId, minutes, minutes]);
+    db[userId] += minutes;
+
+    saveDB(db);
 
     voiceSessions.delete(userId);
   }
@@ -90,21 +98,19 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
 // ================= /activity =================
 client.on("interactionCreate", async (interaction) => {
+
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "activity") {
 
-    db.get(
-      "SELECT voiceTime FROM activity WHERE userId = ?",
-      [interaction.user.id],
-      (err, row) => {
+    const db = loadDB();
 
-        const minutes = row?.voiceTime || 0;
-        const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
-        const completed = minutes >= WEEKLY_GOAL;
+    const minutes = db[interaction.user.id] || 0;
+    const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
+    const completed = minutes >= WEEKLY_GOAL;
 
-        interaction.reply({
-          content:
+    interaction.reply({
+      content:
 `📊 ATTIVITÀ SETTIMANALE
 
 🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
@@ -113,42 +119,41 @@ ${completed
   ? "✅ Obiettivo completato"
   : `⏳ Mancano ${remaining} minuti`
 }`,
-          ephemeral: true
-        });
-      }
-    );
+      ephemeral: true
+    });
   }
 });
 
-// ================= REPORT FUNCTION =================
+// ================= REPORT =================
 async function sendReport(guild) {
 
   const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
   if (!channel) return;
 
-  db.all("SELECT * FROM activity", async (err, rows) => {
+  const db = loadDB();
 
-    let msg = "📊 REPORT SETTIMANALE\n\n";
+  let msg = "📊 REPORT SETTIMANALE\n\n";
 
-    for (const row of rows) {
+  for (const userId in db) {
 
-      const member = await guild.members.fetch(row.userId).catch(() => null);
-      if (!member) continue;
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) continue;
 
-      if (!hasAllowedRole(member)) continue;
+    if (!hasAllowedRole(member)) continue;
 
-      const ok = row.voiceTime >= WEEKLY_GOAL;
+    const minutes = db[userId];
+    const ok = minutes >= WEEKLY_GOAL;
 
-      msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${row.voiceTime}m\n`;
-    }
+    msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
+  }
 
-    await channel.send(msg);
+  await channel.send(msg);
 
-    db.run("UPDATE activity SET voiceTime = 0");
-  });
+  // reset settimana
+  saveDB({});
 }
 
-// ================= WEEKLY RESET (MONDAY 00:00) =================
+// ================= RESET AUTOMATICO =================
 setInterval(() => {
 
   const now = new Date();
@@ -164,14 +169,12 @@ setInterval(() => {
 
     lastReport = nowTime;
 
-    const guild = client.guilds.cache.first();
+    const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return;
 
     sendReport(guild);
 
-    db.run("UPDATE activity SET voiceTime = 0");
-
-    console.log("📊 Report settimanale inviato + reset completato");
+    console.log("📊 Report inviato + reset completato");
   }
 
 }, 60000);

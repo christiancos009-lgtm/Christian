@@ -4,45 +4,31 @@ const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 const commands = [
 
-  // 📩 DM
   new SlashCommandBuilder()
     .setName("dm")
     .setDescription("Invia un DM a un utente")
-    .addUserOption(option =>
-      option.setName("utente")
-        .setDescription("Utente")
-        .setRequired(true)
+    .addUserOption(o =>
+      o.setName("utente").setRequired(true)
     )
-    .addStringOption(option =>
-      option.setName("messaggio")
-        .setDescription("Messaggio")
-        .setRequired(true)
+    .addStringOption(o =>
+      o.setName("messaggio").setRequired(true)
     ),
 
-  // 📊 ACTIVITY (user)
   new SlashCommandBuilder()
     .setName("activity")
-    .setDescription("Mostra la tua attività settimanale")
+    .setDescription("Mostra attività settimanale")
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
-  try {
+  await rest.put(
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID
+    ),
+    { body: commands.map(c => c.toJSON()) }
+  );
 
-    console.log("🔄 Registrazione comandi...");
-
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands.map(c => c.toJSON()) }
-    );
-
-    console.log("✅ Comandi aggiornati!");
-
-  } catch (err) {
-    console.error(err);
-  }
+  console.log("✅ Comandi aggiornati");
 })();
