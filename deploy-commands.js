@@ -4,30 +4,22 @@ const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 const commands = [
 
-  // ================= /dm =================
   new SlashCommandBuilder()
     .setName("dm")
-    .setDescription("Invia un DM a un utente (solo owner)")
-    .addUserOption(option =>
-      option.setName("utente")
-        .setDescription("Utente target")
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName("messaggio")
-        .setDescription("Testo messaggio")
-        .setRequired(true)
+    .setDescription("Invia un DM (solo owner)")
+    .addUserOption(o =>
+      o.setName("utente").setDescription("Target").setRequired(true))
+    .addStringOption(o =>
+      o.setName("messaggio").setDescription("Testo").setRequired(true)
     ),
 
-  // ================= /activity =================
   new SlashCommandBuilder()
     .setName("activity")
-    .setDescription("Mostra la tua attività settimanale"),
+    .setDescription("Mostra attività settimanale"),
 
-  // ================= /report =================
   new SlashCommandBuilder()
     .setName("report")
-    .setDescription("Invia report settimanale manuale (solo owner)")
+    .setDescription("Forza report settimanale (owner only)")
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);

@@ -27,7 +27,9 @@ const WEEKLY_GOAL = 60;
 const DB_FILE = "./activity.json";
 
 function loadDB() {
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({}));
+  }
   return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
@@ -96,17 +98,12 @@ client.on("interactionCreate", async (interaction) => {
   // ================= /activity =================
   if (interaction.commandName === "activity") {
 
-    const member = interaction.member;
+    await interaction.deferReply({ ephemeral: true });
 
-    const allowed = member.roles.cache.some(r =>
-      ALLOWED_ROLES.includes(r.id)
-    );
+    const member = interaction.member || await interaction.guild.members.fetch(interaction.user.id);
 
-    if (!allowed) {
-      return interaction.reply({
-        content: "❌ Non autorizzato (solo MAIN / TALENT / ACADEMY)",
-        ephemeral: true
-      });
+    if (!hasAllowedRole(member)) {
+      return interaction.editReply("❌ Non autorizzato (solo ASE roles)");
     }
 
     const db = loadDB();
@@ -115,25 +112,20 @@ client.on("interactionCreate", async (interaction) => {
     const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
     const completed = minutes >= WEEKLY_GOAL;
 
-    return interaction.reply({
-      content:
+    return interaction.editReply(
 `📊 ATTIVITÀ SETTIMANALE
 
 🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
 
-${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`,
-      ephemeral: true
-    });
+${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`
+    );
   }
 
   // ================= /dm =================
   if (interaction.commandName === "dm") {
 
     if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "❌ Non autorizzato",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
     }
 
     const user = interaction.options.getUser("utente");
@@ -141,22 +133,26 @@ ${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`,
 
     try {
       await user.send(text);
-
-      return interaction.reply({
-        content: "✅ DM inviato",
-        ephemeral: true
-      });
-
+      return interaction.reply({ content: "✅ DM inviato", ephemeral: true });
     } catch {
-      return interaction.reply({
-        content: "❌ Impossibile inviare DM",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "❌ DM fallito", ephemeral: true });
     }
+  }
+
+  // ================= /report =================
+  if (interaction.commandName === "report") {
+
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+    }
+
+    await sendReport(interaction.guild);
+
+    return interaction.reply({ content: "📊 Report inviato", ephemeral: true });
   }
 });
 
-// ================= REPORT =================
+// ================= REPORT FUNCTION =================
 async function sendReport(guild) {
 
   const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
@@ -180,10 +176,11 @@ async function sendReport(guild) {
   }
 
   await channel.send(msg);
+
   saveDB({});
 }
 
-// ================= RESET WEEKLY =================
+// ================= AUTO RESET MONDAY =================
 setInterval(() => {
 
   const now = new Date();
@@ -201,7 +198,7 @@ setInterval(() => {
     if (!guild) return;
 
     sendReport(guild);
-    console.log("📊 Report inviato + reset completato");
+    console.log("📊 Report automatico inviato");
   }
 
 }, 60000);
