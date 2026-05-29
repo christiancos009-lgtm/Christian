@@ -15,11 +15,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("activity")
-    .setDescription("Mostra attività settimanale"),
-
-  new SlashCommandBuilder()
-    .setName("report")
-    .setDescription("Forza report settimanale (owner only)")
+    .setDescription("Mostra attività settimanale")
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);

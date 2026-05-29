@@ -138,21 +138,9 @@ ${completed ? "✅ Obiettivo completato" : `⏳ Mancano ${remaining} minuti`}`
       return interaction.reply({ content: "❌ DM fallito", ephemeral: true });
     }
   }
-
-  // ================= /report =================
-  if (interaction.commandName === "report") {
-
-    if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
-    }
-
-    await sendReport(interaction.guild);
-
-    return interaction.reply({ content: "📊 Report inviato", ephemeral: true });
-  }
 });
 
-// ================= REPORT FUNCTION =================
+// ================= REPORT AUTOMATICO =================
 async function sendReport(guild) {
 
   const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
@@ -160,16 +148,15 @@ async function sendReport(guild) {
 
   const db = loadDB();
 
+  await guild.members.fetch();
+
   let msg = "📊 REPORT SETTIMANALE\n\n";
 
-  for (const userId in db) {
-
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
+  for (const member of guild.members.cache.values()) {
 
     if (!hasAllowedRole(member)) continue;
 
-    const minutes = db[userId];
+    const minutes = db[member.id] || 0;
     const ok = minutes >= WEEKLY_GOAL;
 
     msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
@@ -177,10 +164,11 @@ async function sendReport(guild) {
 
   await channel.send(msg);
 
+  // reset settimanale
   saveDB({});
 }
 
-// ================= AUTO RESET MONDAY =================
+// ================= LUNEDÌ 00:00 =================
 setInterval(() => {
 
   const now = new Date();
@@ -190,16 +178,17 @@ setInterval(() => {
     now.getHours() === 0 &&
     now.getMinutes() === 0;
 
-  if (isMondayMidnight && Date.now() - lastReport > 60000) {
+  if (!isMondayMidnight) return;
 
-    lastReport = Date.now();
+  if (Date.now() - lastReport < 60000) return;
 
-    const guild = client.guilds.cache.get(GUILD_ID);
-    if (!guild) return;
+  lastReport = Date.now();
 
-    sendReport(guild);
-    console.log("📊 Report automatico inviato");
-  }
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return;
+
+  sendReport(guild);
+  console.log("📊 Report automatico inviato (lunedì 00:00)");
 
 }, 60000);
 
