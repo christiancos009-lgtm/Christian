@@ -196,24 +196,39 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // ================= /resetreport =================
-  if (interaction.commandName === "resetreport") {
+ if (interaction.commandName === "resetreport") {
 
-    if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "❌ Non autorizzato",
-        ephemeral: true
-      });
-    }
-
-    saveDB({});
-
+  if (!OWNER_IDS.includes(interaction.user.id)) {
     return interaction.reply({
-      content: "✅ Report resettato",
+      content: "❌ Non autorizzato",
       ephemeral: true
     });
   }
-});
 
+  const db = loadDB();
+  await interaction.guild.members.fetch();
 
+  let msg = "📊 REPORT FINALE (RESET)\n\n";
+
+  for (const member of interaction.guild.members.cache.values()) {
+
+    if (!hasAllowedRole(member)) continue;
+
+    const minutes = db[member.id] || 0;
+    const ok = minutes >= WEEKLY_GOAL;
+
+    msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
+  }
+
+  const channel = await interaction.guild.channels.fetch(REPORT_CHANNEL_ID);
+  await channel.send(msg);
+
+  saveDB({}); // reset
+
+  return interaction.reply({
+    content: "🧹 Reset completato e report inviato nel canale",
+    ephemeral: true
+  });
+}
 // ================= LOGIN =================
 client.login(TOKEN);
