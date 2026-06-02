@@ -146,7 +146,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // /dm
-  if (interaction.commandName === "dm") {
+   if (interaction.commandName === "dm") {
 
     if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
@@ -162,59 +162,58 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "❌ DM fallito", ephemeral: true });
     }
   }
-});
 
-// ================= REPORT AUTOMATICO =================
-async function sendReport(guild) {
+  // ================= /report =================
+  if (interaction.commandName === "report") {
 
-  const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
+    }
 
-  const db = loadDB();
+    const db = loadDB();
 
-  await guild.members.fetch();
+    await interaction.guild.members.fetch();
 
-  let msg = "📊 REPORT SETTIMANALE\n\n";
+    let msg = "📊 REPORT SETTIMANALE\n\n";
 
-  for (const member of guild.members.cache.values()) {
+    for (const member of interaction.guild.members.cache.values()) {
 
-    if (!hasAllowedRole(member)) continue;
+      if (!hasAllowedRole(member)) continue;
 
-    const minutes = db[member.id] || 0;
-    const ok = minutes >= WEEKLY_GOAL;
+      const minutes = db[member.id] || 0;
+      const ok = minutes >= WEEKLY_GOAL;
 
-    msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
+      msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
+    }
+
+    return interaction.reply({
+      content: msg,
+      ephemeral: true
+    });
   }
 
-  await channel.send(msg);
+  // ================= /resetreport =================
+  if (interaction.commandName === "resetreport") {
 
-  saveDB({});
-}
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
+    }
 
-// ================= LUNEDÌ 00:00 =================
-let lastReport = 0;
+    saveDB({});
 
-setInterval(() => {
+    return interaction.reply({
+      content: "✅ Report resettato",
+      ephemeral: true
+    });
+  }
+});
 
-  const now = new Date();
-
-  const isMondayMidnight =
-    now.getDay() === 1 &&
-    now.getHours() === 0 &&
-    now.getMinutes() === 0;
-
-  if (!isMondayMidnight) return;
-  if (Date.now() - lastReport < 60000) return;
-
-  lastReport = Date.now();
-
-  const guild = client.guilds.cache.get(GUILD_ID);
-  if (!guild) return;
-
-  sendReport(guild);
-  console.log("📊 Report automatico inviato");
-
-}, 60000);
 
 // ================= LOGIN =================
 client.login(TOKEN);

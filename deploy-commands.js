@@ -15,13 +15,22 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("activity")
-    .setDescription("Mostra attività settimanale")
+    .setDescription("Mostra attività settimanale"),
+
+  new SlashCommandBuilder()
+    .setName("report")
+    .setDescription("Visualizza il report attività"),
+
+  new SlashCommandBuilder()
+    .setName("resetreport")
+    .setDescription("Resetta tutte le attività")
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
+
     console.log("🔄 Registrazione comandi...");
 
     await rest.put(
@@ -33,6 +42,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
     );
 
     console.log("✅ Comandi aggiornati!");
+
   } catch (err) {
     console.error(err);
   }
