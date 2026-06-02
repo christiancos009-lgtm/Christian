@@ -225,10 +225,12 @@ client.on("interactionCreate", async (interaction) => {
 
   saveDB({}); // reset
 
-  return interaction.reply({
+   return interaction.reply({
     content: "🧹 Reset completato e report inviato nel canale",
     ephemeral: true
   });
 }
+});
+
 // ================= LOGIN =================
 client.login(TOKEN);
