@@ -97,18 +97,24 @@ setInterval(async () => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
-  await guild.members.fetch();
+  // FIX RATE LIMIT
+  if (!guild.members.cache.size) {
+    try {
+      await guild.members.fetch({ limit: 100 });
+    } catch (err) {
+      console.log("Guild fetch rate limited:", err.code);
+    }
+  }
 
   const db = loadDB();
 
   for (const member of guild.members.cache.values()) {
 
-    if (!member.voice.channel) continue;
+    if (!member.voice?.channel) continue;
     if (!hasAllowedRole(member)) continue;
 
     const userId = member.id;
-
-    db[userId] = (db[userId] || 0) + 1; // +1 minuto ogni tick
+    db[userId] = (db[userId] || 0) + 1;
   }
 
   saveDB(db);
