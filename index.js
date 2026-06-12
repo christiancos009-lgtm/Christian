@@ -46,23 +46,32 @@ const client = new Client({
   ]
 });
 
-// ================= READY =================
-client.once("ready", () => {
-  console.log(`Bot online come ${client.user.tag}`);
-});
-
-// ================= ROLE CHECK =================
+// ================= SAFE ROLE CHECK =================
 function hasAllowedRole(member) {
-  return member.roles.cache.some(r =>
+  return member?.roles?.cache?.some(r =>
     ALLOWED_ROLES.includes(r.id)
   );
 }
 
-// ================= VOICE ENTER TRACK =================
+// ================= VOICE TRACK =================
 const voiceSessions = new Map();
 
-client.on("voiceStateUpdate", (oldState, newState) => {
+client.once("ready", async () => {
+  console.log(`Bot online come ${client.user.tag}`);
 
+  const guild = client.guilds.cache.get(GUILD_ID);
+  if (!guild) return;
+
+  // preload safe (evita fetch loop dopo)
+  try {
+    await guild.members.fetch();
+  } catch (e) {
+    console.log("Initial fetch skipped (rate limit safe)");
+  }
+});
+
+// ================= VOICE STATE =================
+client.on("voiceStateUpdate", (oldState, newState) => {
   const member = newState.member || oldState.member;
   if (!member) return;
 
@@ -70,14 +79,11 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
   const userId = member.id;
 
-  // entra in vocale
   if (!oldState.channelId && newState.channelId) {
     voiceSessions.set(userId, Date.now());
   }
 
-  // esce dalla vocale (backup)
   if (oldState.channelId && !newState.channelId) {
-
     const start = voiceSessions.get(userId);
     if (!start) return;
 
@@ -91,50 +97,34 @@ client.on("voiceStateUpdate", (oldState, newState) => {
   }
 });
 
-// ================= 🔥 MAIN FIX: TIMER OGNI 60 SECONDI =================
-setInterval(async () => {
-
+// ================= TIMER (ANTI RATE LIMIT FIX) =================
+setInterval(() => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
-  // FIX RATE LIMIT
-  if (!guild.members.cache.size) {
-    try {
-      await guild.members.fetch({ limit: 100 });
-    } catch (err) {
-      console.log("Guild fetch rate limited:", err.code);
-    }
-  }
-
   const db = loadDB();
 
-  for (const member of guild.members.cache.values()) {
+  const members = guild.members.cache.filter(m =>
+    m?.voice?.channel && hasAllowedRole(m)
+  );
 
-    if (!member.voice?.channel) continue;
-    if (!hasAllowedRole(member)) continue;
-
-    const userId = member.id;
-    db[userId] = (db[userId] || 0) + 1;
+  for (const member of members.values()) {
+    db[member.id] = (db[member.id] || 0) + 1;
   }
 
   saveDB(db);
-
-}, 60 * 1000);
+}, 60000);
 
 // ================= COMMANDS =================
 client.on("interactionCreate", async (interaction) => {
-
   if (!interaction.isChatInputCommand()) return;
 
   // /activity
   if (interaction.commandName === "activity") {
-
     await interaction.deferReply({ ephemeral: true });
 
-    const member = interaction.member;
-
-    if (!hasAllowedRole(member)) {
-      return interaction.editReply("❌ Non autorizzato (solo ASE roles)");
+    if (!hasAllowedRole(interaction.member)) {
+      return interaction.editReply("❌ Non autorizzato");
     }
 
     const db = loadDB();
@@ -143,17 +133,12 @@ client.on("interactionCreate", async (interaction) => {
     const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
 
     return interaction.editReply(
-`📊 ATTIVITÀ SETTIMANALE
-
-🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m
-
-⏳ Mancano ${remaining} minuti`
+      `📊 ATTIVITÀ SETTIMANALE\n\n🎙️ Tempo vocale: ${minutes}m / ${WEEKLY_GOAL}m\n\n⏳ Mancano ${remaining} minuti`
     );
   }
 
   // /dm
-   if (interaction.commandName === "dm") {
-
+  if (interaction.commandName === "dm") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
     }
@@ -171,71 +156,57 @@ client.on("interactionCreate", async (interaction) => {
 
   // ================= /report =================
   if (interaction.commandName === "report") {
-
     if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "❌ Non autorizzato",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
     }
 
+    const guild = interaction.guild;
     const db = loadDB();
 
-    await interaction.guild.members.fetch();
+    const members = guild.members.cache.filter(m => hasAllowedRole(m));
 
     let msg = "📊 REPORT SETTIMANALE\n\n";
 
-    for (const member of interaction.guild.members.cache.values()) {
-
-      if (!hasAllowedRole(member)) continue;
-
+    for (const member of members.values()) {
       const minutes = db[member.id] || 0;
       const ok = minutes >= WEEKLY_GOAL;
 
       msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
     }
 
-    return interaction.reply({
-      content: msg,
-      ephemeral: true
-    });
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   // ================= /resetreport =================
- if (interaction.commandName === "resetreport") {
+  if (interaction.commandName === "resetreport") {
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+    }
 
-  if (!OWNER_IDS.includes(interaction.user.id)) {
+    const guild = interaction.guild;
+    const db = loadDB();
+
+    const members = guild.members.cache.filter(m => hasAllowedRole(m));
+
+    let msg = "📊 REPORT FINALE (RESET)\n\n";
+
+    for (const member of members.values()) {
+      const minutes = db[member.id] || 0;
+      const ok = minutes >= WEEKLY_GOAL;
+
+      msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
+    }
+
+    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID);
+    if (channel) await channel.send(msg);
+
+    saveDB({});
+
     return interaction.reply({
-      content: "❌ Non autorizzato",
+      content: "🧹 Reset completato e report inviato nel canale",
       ephemeral: true
     });
   }
-
-  const db = loadDB();
-  await interaction.guild.members.fetch();
-
-  let msg = "📊 REPORT FINALE (RESET)\n\n";
-
-  for (const member of interaction.guild.members.cache.values()) {
-
-    if (!hasAllowedRole(member)) continue;
-
-    const minutes = db[member.id] || 0;
-    const ok = minutes >= WEEKLY_GOAL;
-
-    msg += `${ok ? "✅" : "❌"} ${member.user.username} — ${minutes}m\n`;
-  }
-
-  const channel = await interaction.guild.channels.fetch(REPORT_CHANNEL_ID);
-  await channel.send(msg);
-
-  saveDB({}); // reset
-
-   return interaction.reply({
-    content: "🧹 Reset completato e report inviato nel canale",
-    ephemeral: true
-  });
-}
 });
 
 // ================= LOGIN =================
