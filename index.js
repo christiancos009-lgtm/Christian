@@ -6,7 +6,7 @@ const fs = require("fs");
 const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
-const REPORT_CHANNEL_ID = "1515495399064993861";
+const REPORT_CHANNEL_ID = "1515495400226684944";
 
 const ALLOWED_ROLES = [
   "1515495396166860881",
