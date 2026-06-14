@@ -148,69 +148,62 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // ================= /report =================
- if (interaction.commandName === "report") {
-  if (!OWNER_IDS.includes(interaction.user.id)) {
-    return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
-  }
+  if (interaction.commandName === "report") {
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+    }
 
-  const guild = interaction.guild;
+    const guild = interaction.guild;
+    await guild.members.fetch();
 
-  // 🔥 FORZA CARICAMENTO MEMBRI
-  await guild.members.fetch();
+    const db = loadDB();
 
-  const db = loadDB();
+    const members = guild.members.cache.filter(m =>
+      hasAllowedRole(m)
+    );
 
-  // 🔥 PRENDI DA CACHE (dopo fetch è completa)
-  const members = guild.members.cache.filter(m =>
-    hasAllowedRole(m)
-  );
+    let msg = "📊 REPORT SETTIMANALE\n\n";
 
-  let msg = "📊 REPORT SETTIMANALE\n\n";
+    for (const member of members.values()) {
+      const minutes = db[member.id] ?? 0;
+      msg += `👤 ${member.user.username} — ${minutes}m\n`;
+    }
 
-  for (const member of members.values()) {
-    const minutes = db[member.id] ?? 0; // 🔥 default 0 garantito
-
-    msg += `👤 ${member.user.username} — ${minutes}m\n`;
-  }
-
-  return interaction.reply({ content: msg, ephemeral: true });
-}
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   // ================= /resetreport =================
- if (interaction.commandName === "resetreport") {
-  if (!OWNER_IDS.includes(interaction.user.id)) {
-    return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+  if (interaction.commandName === "resetreport") {
+    if (!OWNER_IDS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+    }
+
+    const guild = interaction.guild;
+    await guild.members.fetch();
+
+    const db = loadDB();
+
+    const members = guild.members.cache.filter(m =>
+      hasAllowedRole(m)
+    );
+
+    let msg = "📊 REPORT FINALE (RESET)\n\n";
+
+    for (const member of members.values()) {
+      const minutes = db[member.id] ?? 0;
+      msg += `👤 ${member.user.username} — ${minutes}m\n`;
+    }
+
+    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID);
+    if (channel) await channel.send(msg);
+
+    saveDB({});
+
+    return interaction.reply({
+      content: "🧹 Reset completato",
+      ephemeral: true
+    });
   }
-
-  const guild = interaction.guild;
-
-  // 🔥 FORZA CARICAMENTO MEMBRI
-  await guild.members.fetch();
-
-  const db = loadDB();
-
-  const members = guild.members.cache.filter(m =>
-    hasAllowedRole(m)
-  );
-
-  let msg = "📊 REPORT FINALE (RESET)\n\n";
-
-  for (const member of members.values()) {
-    const minutes = db[member.id] ?? 0;
-
-    msg += `👤 ${member.user.username} — ${minutes}m\n`;
-  }
-
-  const channel = await guild.channels.fetch(REPORT_CHANNEL_ID);
-  if (channel) await channel.send(msg);
-
-  saveDB({});
-
-  return interaction.reply({
-    content: "🧹 Reset completato",
-    ephemeral: true
-  });
-}
+});
 
 client.login(TOKEN);
