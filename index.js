@@ -1,5 +1,6 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, ActivityType } = require("discord.js");
+const cheerio = require("cheerio");
 const fs = require("fs");
 
 // ================= CONFIG =================
@@ -7,6 +8,7 @@ const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
 const REPORT_CHANNEL_ID = "1515495400226684944";
+const MAP_URL = "https://fortnite.gg/island/0611-7378-8754";
 
 const ALLOWED_ROLES = [
   "1515495396166860881",
@@ -45,6 +47,41 @@ const client = new Client({
   ]
 });
 
+// ================= FORTNITE.GG STATUS =================
+async function getPlayersNow() {
+  const res = await fetch(MAP_URL, {
+    headers: { "User-Agent": "Mozilla/5.0" }
+  });
+
+  const html = await res.text();
+  const $ = cheerio.load(html);
+  const text = $("body").text().replace(/\s+/g, " ");
+
+  const match = text.match(/([\d,.Kk]+)\s*Players right now/i);
+
+  if (!match) throw new Error("Player count non trovato");
+
+  return match[1];
+}
+
+async function updateMapPresence() {
+  try {
+    const players = await getPlayersNow();
+
+    client.user.setPresence({
+      status: "online",
+      activities: [{
+        name: `ASE1V1 | ${players} player online`,
+        type: ActivityType.Watching
+      }]
+    });
+
+    console.log(`👥 Status aggiornato: ${players} player`);
+  } catch (err) {
+    console.log("❌ Errore Fortnite.GG:", err.message);
+  }
+}
+
 // ================= ROLE CHECK =================
 function hasAllowedRole(member) {
   return member?.roles?.cache?.some(r =>
@@ -58,6 +95,9 @@ const voiceSessions = new Map();
 client.once("ready", async () => {
   console.log(`Bot online come ${client.user.tag}`);
 
+  updateMapPresence();
+  setInterval(updateMapPresence, 5 * 60 * 1000);
+
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
@@ -68,7 +108,6 @@ client.once("ready", async () => {
 client.on("voiceStateUpdate", (oldState, newState) => {
   const member = newState.member || oldState.member;
   if (!member) return;
-
   if (!hasAllowedRole(member)) return;
 
   const userId = member.id;
@@ -113,7 +152,6 @@ setInterval(() => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // ================= /activity =================
   if (interaction.commandName === "activity") {
     await interaction.deferReply({ ephemeral: true });
 
@@ -130,7 +168,6 @@ client.on("interactionCreate", async (interaction) => {
     );
   }
 
-  // ================= /dm =================
   if (interaction.commandName === "dm") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
@@ -147,7 +184,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // ================= /report =================
   if (interaction.commandName === "report") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
@@ -172,7 +208,6 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: msg, ephemeral: true });
   }
 
-  // ================= /resetreport =================
   if (interaction.commandName === "resetreport") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
