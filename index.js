@@ -50,18 +50,28 @@ const client = new Client({
 // ================= FORTNITE.GG STATUS =================
 async function getPlayersNow() {
   const res = await fetch(MAP_URL, {
-    headers: { "User-Agent": "Mozilla/5.0" }
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html"
+    }
   });
 
   const html = await res.text();
-  const $ = cheerio.load(html);
-  const text = $("body").text().replace(/\s+/g, " ");
 
-  const match = text.match(/([\d,.Kk]+)\s*Players right now/i);
+  const patterns = [
+    /"players"\s*:\s*(\d+)/i,
+    /"playerCount"\s*:\s*(\d+)/i,
+    /"playersNow"\s*:\s*(\d+)/i,
+    /"currentPlayers"\s*:\s*(\d+)/i,
+    /(\d+)\s*<\/[^>]+>\s*<[^>]+>\s*PLAYERS RIGHT NOW/i
+  ];
 
-  if (!match) throw new Error("Player count non trovato");
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) return match[1];
+  }
 
-  return match[1];
+  throw new Error("Player count non trovato");
 }
 
 async function updateMapPresence() {
