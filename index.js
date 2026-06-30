@@ -67,45 +67,59 @@ client.once("ready", async () => {
   console.log("✅ Membri caricati.");
 });
 
+// ================= ACTIVE VOICE USERS =================
+const activeVoiceUsers = new Set();
+
 // ================= VOICE STATE =================
 client.on("voiceStateUpdate", async (oldState, newState) => {
   const member = newState.member || oldState.member;
   if (!member) return;
 
-  await member.fetch().catch(() => null);
+  const userId = member.id;
 
-  if (!hasAllowedRole(member)) return;
+  if (!hasAllowedRole(member)) {
+    activeVoiceUsers.delete(userId);
+    return;
+  }
 
   if (!oldState.channelId && newState.channelId) {
-    console.log(`🎙️ ${member.user.username} è entrato in vocale`);
+    activeVoiceUsers.add(userId);
+    console.log(`🎙️ START tracking ${member.user.username}`);
   }
 
   if (oldState.channelId && !newState.channelId) {
-    console.log(`🚪 ${member.user.username} è uscito dalla vocale`);
+    activeVoiceUsers.delete(userId);
+    console.log(`🚪 STOP tracking ${member.user.username}`);
   }
 });
 
 // ================= TIMER MINUTO PER MINUTO =================
-setInterval(async () => {
+setInterval(() => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
   const db = loadDB();
 
-  for (const voiceState of guild.voiceStates.cache.values()) {
-    if (!voiceState.channelId) continue;
+  for (const userId of activeVoiceUsers) {
+    const member = guild.members.cache.get(userId);
 
-    let member = voiceState.member;
     if (!member) {
-      member = await guild.members.fetch(voiceState.id).catch(() => null);
+      activeVoiceUsers.delete(userId);
+      continue;
     }
 
-    if (!member) continue;
-    if (!hasAllowedRole(member)) continue;
+    if (!member.voice.channelId) {
+      activeVoiceUsers.delete(userId);
+      continue;
+    }
 
-    db[member.id] = (db[member.id] || 0) + 1;
+    if (!hasAllowedRole(member)) {
+      activeVoiceUsers.delete(userId);
+      continue;
+    }
 
-    console.log(`+1 minuto a ${member.user.username} | Totale: ${db[member.id]}m`);
+    db[userId] = (db[userId] || 0) + 1;
+    console.log(`✅ +1 minuto a ${member.user.username} | Totale: ${db[userId]}m`);
   }
 
   saveDB(db);
