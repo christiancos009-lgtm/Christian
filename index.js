@@ -71,6 +71,8 @@ async function getPlayersNow() {
     if (match) return match[1];
   }
 
+  console.log("HTML DEBUG:", html.slice(0, 2000));
+
   throw new Error("Player count non trovato");
 }
 
