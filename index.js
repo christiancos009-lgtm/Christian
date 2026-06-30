@@ -1,6 +1,6 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, ActivityType } = require("discord.js");
-const cheerio = require("cheerio");
+
+const { Client, GatewayIntentBits } = require("discord.js");
 const fs = require("fs");
 
 // ================= CONFIG =================
@@ -8,7 +8,6 @@ const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
 const REPORT_CHANNEL_ID = "1515495400226684944";
-const MAP_URL = "https://fortnite.gg/island/0611-7378-8754";
 
 const ALLOWED_ROLES = [
   "1515495396166860881",
@@ -19,7 +18,7 @@ const ALLOWED_ROLES = [
 const OWNER_IDS = [
   "616719017234792450",
   "1092045280305762304",
-  "1283221877535412356",
+  "1283221877535412356"
 ];
 
 const WEEKLY_GOAL = 60;
@@ -31,6 +30,7 @@ function loadDB() {
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify({}));
   }
+
   return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
@@ -47,110 +47,71 @@ const client = new Client({
   ]
 });
 
-// ================= FORTNITE.GG STATUS =================
-async function getPlayersNow() {
-  const res = await fetch(MAP_URL, {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "text/html"
-    }
-  });
-
-  const html = await res.text();
-
-  const patterns = [
-    /"players"\s*:\s*(\d+)/i,
-    /"playerCount"\s*:\s*(\d+)/i,
-    /"playersNow"\s*:\s*(\d+)/i,
-    /"currentPlayers"\s*:\s*(\d+)/i,
-    /(\d+)\s*<\/[^>]+>\s*<[^>]+>\s*PLAYERS RIGHT NOW/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match) return match[1];
-  }
-
-  console.log("HTML DEBUG:", html.slice(0, 2000));
-
-  throw new Error("Player count non trovato");
-}
-
-async function updateMapPresence() {
-  try {
-    const players = await getPlayersNow();
-
-    client.user.setPresence({
-      status: "online",
-      activities: [{
-        name: `ASE1V1 | ${players} player online`,
-        type: ActivityType.Watching
-      }]
-    });
-
-    console.log(`👥 Status aggiornato: ${players} player`);
-  } catch (err) {
-    console.log("❌ Errore Fortnite.GG:", err.message);
-  }
-}
-
 // ================= ROLE CHECK =================
 function hasAllowedRole(member) {
-  return member?.roles?.cache?.some(r =>
-    ALLOWED_ROLES.includes(r.id)
+  return member?.roles?.cache?.some(role =>
+    ALLOWED_ROLES.includes(role.id)
   );
 }
 
 // ================= VOICE TRACK =================
 const voiceSessions = new Map();
 
+// ================= READY =================
 client.once("ready", async () => {
   console.log(`Bot online come ${client.user.tag}`);
-
-  updateMapPresence();
-  setInterval(updateMapPresence, 5 * 60 * 1000);
 
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
-  await guild.members.fetch();
+  try {
+    await guild.members.fetch();
+    console.log("✅ Membri caricati");
+  } catch (err) {
+    console.error("❌ Errore caricamento membri:", err);
+  }
 });
 
 // ================= VOICE STATE =================
 client.on("voiceStateUpdate", (oldState, newState) => {
   const member = newState.member || oldState.member;
   if (!member) return;
+
   if (!hasAllowedRole(member)) return;
 
   const userId = member.id;
 
+  // entra in vocale
   if (!oldState.channelId && newState.channelId) {
     voiceSessions.set(userId, Date.now());
   }
 
+  // esce dalla vocale
   if (oldState.channelId && !newState.channelId) {
     const start = voiceSessions.get(userId);
     if (!start) return;
 
     const minutes = Math.floor((Date.now() - start) / 60000);
 
-    const db = loadDB();
-    db[userId] = (db[userId] || 0) + minutes;
-    saveDB(db);
+    if (minutes > 0) {
+      const db = loadDB();
+      db[userId] = (db[userId] || 0) + minutes;
+      saveDB(db);
+    }
 
     voiceSessions.delete(userId);
   }
 });
 
-// ================= TIMER =================
+// ================= TIMER OGNI 60 SECONDI =================
 setInterval(() => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
   const db = loadDB();
 
-  const members = guild.members.cache.filter(m =>
-    m.voice?.channel && hasAllowedRole(m)
+  const members = guild.members.cache.filter(member =>
+    member.voice?.channel && hasAllowedRole(member)
   );
 
   for (const member of members.values()) {
@@ -158,20 +119,24 @@ setInterval(() => {
   }
 
   saveDB(db);
-}, 60000);
+}, 60 * 1000);
 
 // ================= COMMANDS =================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
+  // ================= /activity =================
   if (interaction.commandName === "activity") {
     await interaction.deferReply({ ephemeral: true });
 
-    if (!hasAllowedRole(interaction.member)) {
+    const member = interaction.member;
+
+    if (!hasAllowedRole(member)) {
       return interaction.editReply("❌ Non autorizzato");
     }
 
     const db = loadDB();
+
     const minutes = db[interaction.user.id] || 0;
     const remaining = Math.max(WEEKLY_GOAL - minutes, 0);
 
@@ -180,9 +145,13 @@ client.on("interactionCreate", async (interaction) => {
     );
   }
 
+  // ================= /dm =================
   if (interaction.commandName === "dm") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
     }
 
     const user = interaction.options.getUser("utente");
@@ -190,24 +159,38 @@ client.on("interactionCreate", async (interaction) => {
 
     try {
       await user.send(text);
-      return interaction.reply({ content: "✅ Inviato", ephemeral: true });
-    } catch {
-      return interaction.reply({ content: "❌ Errore DM", ephemeral: true });
+
+      return interaction.reply({
+        content: "✅ Inviato",
+        ephemeral: true
+      });
+    } catch (err) {
+      console.error(err);
+
+      return interaction.reply({
+        content: "❌ Errore DM",
+        ephemeral: true
+      });
     }
   }
 
+  // ================= /report =================
   if (interaction.commandName === "report") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
     }
 
     const guild = interaction.guild;
+
     await guild.members.fetch();
 
     const db = loadDB();
 
-    const members = guild.members.cache.filter(m =>
-      hasAllowedRole(m)
+    const members = guild.members.cache.filter(member =>
+      hasAllowedRole(member)
     );
 
     let msg = "📊 REPORT SETTIMANALE\n\n";
@@ -217,21 +200,29 @@ client.on("interactionCreate", async (interaction) => {
       msg += `👤 ${member.user.username} — ${minutes}m\n`;
     }
 
-    return interaction.reply({ content: msg, ephemeral: true });
+    return interaction.reply({
+      content: msg,
+      ephemeral: true
+    });
   }
 
+  // ================= /resetreport =================
   if (interaction.commandName === "resetreport") {
     if (!OWNER_IDS.includes(interaction.user.id)) {
-      return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Non autorizzato",
+        ephemeral: true
+      });
     }
 
     const guild = interaction.guild;
+
     await guild.members.fetch();
 
     const db = loadDB();
 
-    const members = guild.members.cache.filter(m =>
-      hasAllowedRole(m)
+    const members = guild.members.cache.filter(member =>
+      hasAllowedRole(member)
     );
 
     let msg = "📊 REPORT FINALE (RESET)\n\n";
@@ -241,8 +232,11 @@ client.on("interactionCreate", async (interaction) => {
       msg += `👤 ${member.user.username} — ${minutes}m\n`;
     }
 
-    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID);
-    if (channel) await channel.send(msg);
+    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
+
+    if (channel) {
+      await channel.send(msg);
+    }
 
     saveDB({});
 
@@ -253,4 +247,12 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
+// ================= ERROR HANDLING =================
+client.on("error", console.error);
+
+process.on("unhandledRejection", console.error);
+
+process.on("uncaughtException", console.error);
+
+// ================= LOGIN =================
 client.login(TOKEN);
