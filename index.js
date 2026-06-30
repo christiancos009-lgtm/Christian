@@ -29,6 +29,7 @@ function loadDB() {
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify({}));
   }
+
   return JSON.parse(fs.readFileSync(DB_FILE));
 }
 
@@ -47,62 +48,64 @@ const client = new Client({
 
 // ================= ROLE CHECK =================
 function hasAllowedRole(member) {
-  return member?.roles?.cache?.some(r =>
-    ALLOWED_ROLES.includes(r.id)
+  return member?.roles?.cache?.some(role =>
+    ALLOWED_ROLES.includes(role.id)
   );
 }
 
-// ================= VOICE TRACK =================
-const voiceSessions = new Map();
-
+// ================= READY =================
 client.once("ready", async () => {
-  console.log(`Bot online come ${client.user.tag}`);
+  console.log(`✅ Bot online come ${client.user.tag}`);
 
   const guild = client.guilds.cache.get(GUILD_ID);
-  if (!guild) return;
+  if (!guild) {
+    console.log("❌ Server non trovato. Controlla GUILD_ID.");
+    return;
+  }
 
   await guild.members.fetch();
+  console.log("✅ Membri caricati.");
 });
 
 // ================= VOICE STATE =================
-client.on("voiceStateUpdate", (oldState, newState) => {
+client.on("voiceStateUpdate", async (oldState, newState) => {
   const member = newState.member || oldState.member;
   if (!member) return;
-    if (!hasAllowedRole(member)) return;
 
-  const userId = member.id;
+  await member.fetch().catch(() => null);
+
+  if (!hasAllowedRole(member)) return;
 
   if (!oldState.channelId && newState.channelId) {
-    voiceSessions.set(userId, Date.now());
+    console.log(`🎙️ ${member.user.username} è entrato in vocale`);
   }
 
   if (oldState.channelId && !newState.channelId) {
-    const start = voiceSessions.get(userId);
-    if (!start) return;
-
-    const minutes = Math.floor((Date.now() - start) / 60000);
-
-    const db = loadDB();
-    db[userId] = (db[userId] || 0) + minutes;
-    saveDB(db);
-
-    voiceSessions.delete(userId);
+    console.log(`🚪 ${member.user.username} è uscito dalla vocale`);
   }
 });
 
-// ================= TIMER =================
-setInterval(() => {
+// ================= TIMER MINUTO PER MINUTO =================
+setInterval(async () => {
   const guild = client.guilds.cache.get(GUILD_ID);
   if (!guild) return;
 
   const db = loadDB();
 
-  const members = guild.members.cache.filter(m =>
-    m.voice?.channel && hasAllowedRole(m)
-  );
+  for (const voiceState of guild.voiceStates.cache.values()) {
+    if (!voiceState.channelId) continue;
 
-  for (const member of members.values()) {
+    let member = voiceState.member;
+    if (!member) {
+      member = await guild.members.fetch(voiceState.id).catch(() => null);
+    }
+
+    if (!member) continue;
+    if (!hasAllowedRole(member)) continue;
+
     db[member.id] = (db[member.id] || 0) + 1;
+
+    console.log(`+1 minuto a ${member.user.username} | Totale: ${db[member.id]}m`);
   }
 
   saveDB(db);
@@ -116,7 +119,9 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "activity") {
     await interaction.deferReply({ ephemeral: true });
 
-    if (!hasAllowedRole(interaction.member)) {
+    const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+
+    if (!member || !hasAllowedRole(member)) {
       return interaction.editReply("❌ Non autorizzato");
     }
 
@@ -148,7 +153,7 @@ client.on("interactionCreate", async (interaction) => {
 
   // ================= /report =================
   if (interaction.commandName === "report") {
-        if (!OWNER_IDS.includes(interaction.user.id)) {
+    if (!OWNER_IDS.includes(interaction.user.id)) {
       return interaction.reply({ content: "❌ Non autorizzato", ephemeral: true });
     }
 
@@ -157,8 +162,8 @@ client.on("interactionCreate", async (interaction) => {
 
     const db = loadDB();
 
-    const members = guild.members.cache.filter(m =>
-      hasAllowedRole(m)
+    const members = guild.members.cache.filter(member =>
+      hasAllowedRole(member)
     );
 
     let msg = "📊 REPORT SETTIMANALE\n\n";
@@ -182,8 +187,8 @@ client.on("interactionCreate", async (interaction) => {
 
     const db = loadDB();
 
-    const members = guild.members.cache.filter(m =>
-      hasAllowedRole(m)
+    const members = guild.members.cache.filter(member =>
+      hasAllowedRole(member)
     );
 
     let msg = "📊 REPORT FINALE (RESET)\n\n";
@@ -193,7 +198,7 @@ client.on("interactionCreate", async (interaction) => {
       msg += `👤 ${member.user.username} — ${minutes}m\n`;
     }
 
-    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID);
+    const channel = await guild.channels.fetch(REPORT_CHANNEL_ID).catch(() => null);
     if (channel) await channel.send(msg);
 
     saveDB({});
