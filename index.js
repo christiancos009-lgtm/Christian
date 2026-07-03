@@ -147,11 +147,17 @@ async function changeRosterLevel(interaction, direction) {
   }
 
   const actionMessage = direction === 1
-    ? `${user} è salito di roster in ${targetRole.name}`
-    : `${user} è sceso di roster in ${targetRole.name}`;
+    ? `${user} è salito di roster in <@&${targetRole.id}>`
+    : `${user} è sceso di roster in <@&${targetRole.id}>`;
 
   try {
-    await notificationChannel.send(actionMessage);
+    await notificationChannel.send({
+      content: actionMessage,
+      allowedMentions: {
+        users: [user.id],
+        roles: [targetRole.id]
+      }
+    });
   } catch (error) {
     console.error("Errore durante l'invio della notifica roster:", error);
     return interaction.editReply(
