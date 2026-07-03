@@ -22,6 +22,20 @@ const commands = [
     .setDescription("Visualizza il report attività"),
 
   new SlashCommandBuilder()
+    .setName("promote")
+    .setDescription("Promuove un utente al livello successivo del roster")
+    .addUserOption(o =>
+      o.setName("utente").setDescription("Utente da promuovere").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("downgrade")
+    .setDescription("Fa scendere un utente al livello precedente del roster")
+    .addUserOption(o =>
+      o.setName("utente").setDescription("Utente da far scendere").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName("resetreport")
     .setDescription("Resetta tutte le attività")
 ];
