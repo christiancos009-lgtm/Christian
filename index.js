@@ -25,10 +25,10 @@ const ALLOWED_ROLES = [
 const OWNER_IDS = [
   "616719017234792450",
   "1092045280305762304",
-  "1283221877535412356",
+  "1193517036786163742",
 ];
 
-const WEEKLY_GOAL = 60;
+const WEEKLY_GOAL = 240;
 
 // ================= DB =================
 const DB_FILE = "./activity.json";
